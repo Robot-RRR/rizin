@@ -169,9 +169,10 @@ RZ_API bool rz_file_fexists(const char *fmt, ...) {
 }
 
 RZ_API bool rz_file_exists(const char *str) {
+	rz_return_val_if_fail(!RZ_STR_ISEMPTY(str), false);
 	char *absfile = rz_file_abspath(str);
 	struct stat buf = { 0 };
-	rz_return_val_if_fail(!RZ_STR_ISEMPTY(str), false);
+
 	if (file_stat(absfile, &buf) == -1) {
 		free(absfile);
 		return false;
@@ -356,6 +357,21 @@ RZ_API char *rz_file_path(const char *bin) {
 	free(path_env);
 	free(path);
 	return strdup(bin);
+}
+
+RZ_API char *rz_file_binsh(void) {
+	char *bin_sh = rz_sys_getenv("SHELL");
+	if (RZ_STR_ISNOTEMPTY(bin_sh)) {
+		return bin_sh;
+	}
+	free(bin_sh);
+	bin_sh = rz_file_path("sh");
+	if (RZ_STR_ISNOTEMPTY(bin_sh)) {
+		return bin_sh;
+	}
+	free(bin_sh);
+	bin_sh = strdup("/bin/sh");
+	return bin_sh;
 }
 
 RZ_API char *rz_stdin_slurp(int *sz) {

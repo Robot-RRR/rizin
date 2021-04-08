@@ -156,12 +156,13 @@ RzBinPlugin rz_bin_plugin_elf = {
 	.libs = &libs,
 	.relocs = &relocs,
 	.patch_relocs = &patch_relocs,
-	.dbginfo = &rz_bin_dbginfo_elf,
 	.create = &create,
 	.write = &rz_bin_write_elf,
 	.file_type = &get_file_type,
 	.regstate = &regstate,
 	.maps = &maps,
+	.section_type_to_string = &Elf_(section_type_to_string),
+	.section_flag_to_rzlist = &Elf_(section_flag_to_rzlist),
 };
 
 #ifndef RZ_PLUGIN_INCORE

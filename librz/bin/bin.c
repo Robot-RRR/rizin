@@ -54,10 +54,6 @@ static const char *__getname(RzBin *bin, int type, int idx, bool sd) {
 	return NULL;
 }
 
-static ut64 binobj_a2b(RzBinObject *o, ut64 addr) {
-	return o ? addr + o->baddr_shift : addr;
-}
-
 // TODO: move these two function do a different file
 RZ_API RzBinXtrData *rz_bin_xtrdata_new(RzBuffer *buf, ut64 offset, ut64 size, ut32 file_count, RzBinXtrMetadata *metadata) {
 	RzBinXtrData *data = RZ_NEW0(RzBinXtrData);
@@ -168,8 +164,7 @@ RZ_API RzBinImport *rz_bin_import_clone(RzBinImport *o) {
 	return res;
 }
 
-RZ_API void rz_bin_import_free(void *_imp) {
-	RzBinImport *imp = (RzBinImport *)_imp;
+RZ_API void rz_bin_import_free(RzBinImport *imp) {
 	if (imp) {
 		RZ_FREE(imp->name);
 		RZ_FREE(imp->libname);
@@ -196,12 +191,12 @@ RZ_API RzBinSymbol *rz_bin_symbol_new(const char *name, ut64 paddr, ut64 vaddr) 
 	return sym;
 }
 
-RZ_API void rz_bin_symbol_free(void *_sym) {
-	RzBinSymbol *sym = (RzBinSymbol *)_sym;
+RZ_API void rz_bin_symbol_free(RzBinSymbol *sym) {
 	if (sym) {
 		free(sym->name);
 		free(sym->libname);
 		free(sym->classname);
+		free(sym->visibility_str);
 		free(sym);
 	}
 }
@@ -246,6 +241,8 @@ RZ_API bool rz_bin_reload(RzBin *bin, ut32 bf_id, ut64 baseaddr) {
 	RzBinOptions opt;
 	rz_bin_options_init(&opt, bf->fd, baseaddr, bf->loadaddr, bin->rawstr);
 	opt.filename = bf->file;
+
+	rz_buf_seek(bf->buf, 0, RZ_BUF_SET);
 
 	bool res = rz_bin_open_buf(bin, bf->buf, &opt);
 	rz_bin_file_delete(bin, bf->id);
@@ -659,15 +656,6 @@ RZ_API void rz_bin_set_baddr(RzBin *bin, ut64 baddr) {
 	// maybe in RzBinFile.rebase() ?
 }
 
-RZ_API RzBinAddr *rz_bin_get_sym(RzBin *bin, int sym) {
-	rz_return_val_if_fail(bin, NULL);
-	RzBinObject *o = rz_bin_cur_object(bin);
-	if (sym < 0 || sym >= RZ_BIN_SYM_LAST) {
-		return NULL;
-	}
-	return o ? o->binsym[sym] : NULL;
-}
-
 // XXX: those accessors are redundant
 RZ_API RzList *rz_bin_get_entries(RzBin *bin) {
 	rz_return_val_if_fail(bin, NULL);
@@ -710,22 +698,6 @@ static RzList *relocs_rbtree2list(RBNode *root) {
 	return res;
 }
 
-RZ_API RBNode *rz_bin_patch_relocs(RzBin *bin) {
-	rz_return_val_if_fail(bin, NULL);
-	RzBinFile *bf = rz_bin_cur(bin);
-	if (!bf || !bf->o) {
-		return NULL;
-	}
-	return rz_bin_object_patch_relocs(bf, bf->o);
-}
-
-// return a list of <const RzBinReloc> that needs to be freed by the caller
-RZ_API RzList *rz_bin_patch_relocs_list(RzBin *bin) {
-	rz_return_val_if_fail(bin, NULL);
-	RBNode *root = rz_bin_patch_relocs(bin);
-	return root ? relocs_rbtree2list(root) : NULL;
-}
-
 RZ_API RBNode *rz_bin_get_relocs(RzBin *bin) {
 	rz_return_val_if_fail(bin, NULL);
 	RzBinObject *o = rz_bin_cur_object(bin);
@@ -756,7 +728,7 @@ RZ_API RzBinSection *rz_bin_get_section_at(RzBinObject *o, ut64 off, int va) {
 		if (section->is_segment) {
 			continue;
 		}
-		from = va ? binobj_a2b(o, section->vaddr) : section->paddr;
+		from = va ? rz_bin_object_addr_with_base(o, section->vaddr) : section->paddr;
 		to = from + (va ? section->vsize : section->size);
 		if (off >= from && off < to) {
 			return section;
@@ -1270,35 +1242,6 @@ RZ_API RzList * /*<RzBinClass>*/ rz_bin_get_classes(RzBin *bin) {
 	return o ? o->classes : NULL;
 }
 
-/* returns vaddr, rebased with the baseaddr of bin, if va is enabled for bin,
- * paddr otherwise */
-RZ_API ut64 rz_bin_get_vaddr(RzBin *bin, ut64 paddr, ut64 vaddr) {
-	rz_return_val_if_fail(bin && paddr != UT64_MAX, UT64_MAX);
-
-	if (!bin->cur) {
-		return paddr;
-	}
-	/* hack to realign thumb symbols */
-	if (bin->cur->o && bin->cur->o->info && bin->cur->o->info->arch) {
-		if (bin->cur->o->info->bits == 16) {
-			RzBinSection *s = rz_bin_get_section_at(bin->cur->o, paddr, false);
-			// autodetect thumb
-			if (s && (s->perm & RZ_PERM_X) && strstr(s->name, "text")) {
-				if (!strcmp(bin->cur->o->info->arch, "arm") && (vaddr & 1)) {
-					vaddr = (vaddr >> 1) << 1;
-				}
-			}
-		}
-	}
-	return rz_bin_file_get_vaddr(bin->cur, paddr, vaddr);
-}
-
-RZ_API ut64 rz_bin_a2b(RzBin *bin, ut64 addr) {
-	rz_return_val_if_fail(bin, UT64_MAX);
-	RzBinObject *o = rz_bin_cur_object(bin);
-	return binobj_a2b(o, addr);
-}
-
 RZ_API ut64 rz_bin_get_size(RzBin *bin) {
 	rz_return_val_if_fail(bin, UT64_MAX);
 	RzBinObject *o = rz_bin_cur_object(bin);
@@ -1360,9 +1303,7 @@ RZ_API RzBinField *rz_bin_field_new(ut64 paddr, ut64 vaddr, int size, const char
 	return ptr;
 }
 
-// use void* to honor the RzListFree signature
-RZ_API void rz_bin_field_free(void *_field) {
-	RzBinField *field = (RzBinField *)_field;
+RZ_API void rz_bin_field_free(RzBinField *field) {
 	if (field) {
 		free(field->name);
 		free(field->comment);
@@ -1371,8 +1312,6 @@ RZ_API void rz_bin_field_free(void *_field) {
 	}
 }
 
-// method name too long
-// RzBin.methFlagToString(RzBin.Method.CLASS)
 RZ_API const char *rz_bin_get_meth_flag_string(ut64 flag, bool compact) {
 	switch (flag) {
 	case RZ_BIN_METH_CLASS:

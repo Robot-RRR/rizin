@@ -460,7 +460,7 @@ static bool cb_scrrainbow(void *user, void *data) {
 		rz_cons_pal_random();
 	} else {
 		core->print->flags &= (~RZ_PRINT_FLAGS_RAINBOW);
-		rz_core_cmd0(core, "ecoo");
+		rz_core_load_theme(core, rz_core_get_theme());
 	}
 	rz_print_set_flags(core->print, core->print->flags);
 	return true;
@@ -556,6 +556,14 @@ static void update_asmbits_options(RzCore *core, RzConfigNode *node) {
 	}
 }
 
+static void update_syscall_ns(RzCore *core) {
+	if (core->analysis->syscall->db) {
+		sdb_ns_set(core->sdb, "syscall", core->analysis->syscall->db);
+	} else {
+		sdb_ns_unset(core->sdb, "syscall", NULL);
+	}
+}
+
 static bool cb_asmarch(void *user, void *data) {
 	char asmparser[32];
 	RzCore *core = (RzCore *)user;
@@ -648,6 +656,7 @@ static bool cb_asmarch(void *user, void *data) {
 			//eprintf ("asm.arch: Cannot setup syscall '%s/%s' from '%s'\n",
 			//	node->value, asmos, RZ_LIBDIR"/rizin/"RZ_VERSION"/syscall");
 		}
+		update_syscall_ns(core);
 	}
 	//if (!strcmp (node->value, "bf"))
 	//	rz_config_set (core->config, "dbg.backend", "bf");
@@ -682,10 +691,12 @@ static bool cb_asmarch(void *user, void *data) {
 	// changing asm.arch changes analysis.arch
 	// changing analysis.arch sets types db
 	// so ressetting is redundant and may lead to bugs
-	// 1 case this is usefull is when sdb_types is null
-	if (!core->analysis || !core->analysis->sdb_types) {
+	// 1 case this is usefull is when types is null
+	if (!core->analysis || !core->analysis->typedb) {
 		rz_core_analysis_type_init(core);
 	}
+	// set endian of RzAnalysis to match binary
+	rz_analysis_set_big_endian(core->analysis, bigbin);
 	rz_core_analysis_cc_init(core);
 
 	return true;
@@ -722,6 +733,9 @@ static bool cb_asmbits(void *user, void *data) {
 	}
 
 	int bits = node->i_value;
+	if (!bits) {
+		return false;
+	}
 #if 0
 // TODO: pretty good optimization, but breaks many tests when arch is different i think
 	if (bits == core->rasm->bits && bits == core->analysis->bits && bits == core->dbg->bits) {
@@ -747,7 +761,7 @@ static bool cb_asmbits(void *user, void *data) {
 	}
 	if (core->dbg && core->analysis && core->analysis->cur) {
 		rz_debug_set_arch(core->dbg, core->analysis->cur->arch, bits);
-		bool load_from_debug = rz_config_get_i(core->config, "cfg.debug");
+		bool load_from_debug = rz_config_get_b(core->config, "cfg.debug");
 		if (load_from_debug) {
 			if (core->dbg->h && core->dbg->h->reg_profile) {
 // XXX. that should depend on the plugin, not the host os
@@ -776,6 +790,7 @@ static bool cb_asmbits(void *user, void *data) {
 			//eprintf ("asm.arch: Cannot setup syscall '%s/%s' from '%s'\n",
 			//	node->value, asmos, RZ_LIBDIR"/rizin/"RZ_VERSION"/syscall");
 		}
+		update_syscall_ns(core);
 		__setsegoff(core->config, asmarch, core->analysis->bits);
 		if (core->dbg) {
 			rz_bp_use(core->dbg->bp, asmarch, core->analysis->bits);
@@ -938,6 +953,7 @@ static bool cb_asmos(void *user, void *data) {
 	if (asmarch) {
 		const char *asmcpu = rz_config_get(core->config, "asm.cpu");
 		rz_syscall_setup(core->analysis->syscall, asmarch->value, core->analysis->bits, asmcpu, node->value);
+		update_syscall_ns(core);
 		__setsegoff(core->config, asmarch->value, asmbits);
 	}
 	rz_analysis_set_os(core->analysis, node->value);
@@ -1161,12 +1177,16 @@ static bool cb_bigendian(void *user, void *data) {
 	bool isbig = rz_asm_set_big_endian(core->rasm, node->i_value);
 	// Set analysis endianness the same as asm
 	rz_analysis_set_big_endian(core->analysis, isbig);
+	// While analysis sets endianess for TypesDB there might
+	// be cases when it isn't availble for the chosen analysis
+	// plugin but types and printing commands still need the
+	// corresponding endianness. Thus we set these explicitly:
+	rz_type_db_set_endian(core->analysis->typedb, node->i_value);
+	core->print->big_endian = node->i_value;
 	// the big endian should also be assigned to dbg->bp->endian
 	if (core->dbg && core->dbg->bp) {
 		core->dbg->bp->endian = isbig;
 	}
-	// Set printing endian to user's choice
-	core->print->big_endian = node->i_value;
 	return true;
 }
 
@@ -1769,7 +1789,7 @@ static bool cb_iopcachewrite(void *user, void *data) {
 
 RZ_API bool rz_core_esil_cmd(RzAnalysisEsil *esil, const char *cmd, ut64 a1, ut64 a2) {
 	if (cmd && *cmd) {
-		RzCore *core = esil->analysis->user;
+		RzCore *core = esil->analysis->core;
 		rz_core_cmdf(core, "%s %" PFMT64d " %" PFMT64d, cmd, a1, a2);
 		return core->num->value;
 	}
@@ -2461,7 +2481,7 @@ static bool cb_binprefix(void *user, void *data) {
 			}
 			char *name = (char *)rz_file_basename(core->bin->file);
 			if (name) {
-				rz_name_filter(name, strlen(name));
+				rz_name_filter(name, strlen(name), true);
 				rz_str_filter(name, strlen(name));
 				core->bin->prefix = strdup(name);
 				free(name);
@@ -3074,7 +3094,7 @@ RZ_API int rz_core_config_init(RzCore *core) {
 	SETBPREF("asm.section", "false", "Show section name before offset");
 	SETBPREF("asm.section.perm", "false", "Show section permissions in the disasm");
 	SETBPREF("asm.section.name", "true", "Show section name in the disasm");
-	SETI("asm.section.col", 20, "Columns width to show asm.section");
+	SETI("asm.section.col", 30, "Columns width to show asm.section");
 	SETCB("asm.sub.section", "false", &cb_asmsubsec, "Show offsets in disasm prefixed with section/map name");
 	SETCB("asm.pseudo", "false", &cb_asmpseudo, "Enable pseudo syntax");
 	SETBPREF("asm.size", "false", "Show size of opcodes in disassembly (pd)");

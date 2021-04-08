@@ -29,10 +29,6 @@ static RzBinString *__stringAt(RzBinFile *bf, RzList *ret, ut64 addr) {
 	return NULL;
 }
 
-static ut64 binobj_a2b(RzBinObject *o, ut64 addr) {
-	return o ? addr + o->baddr_shift : addr;
-}
-
 static void print_string(RzBinFile *bf, RzBinString *string, int raw, PJ *pj) {
 	rz_return_if_fail(bf && string);
 
@@ -53,7 +49,7 @@ static void print_string(RzBinFile *bf, RzBinString *string, int raw, PJ *pj) {
 	}
 	section_name = s ? s->name : "";
 	type_string = rz_bin_string_type(string->type);
-	vaddr = addr = rz_bin_get_vaddr(bin, string->paddr, string->vaddr);
+	vaddr = addr = bf->o ? rz_bin_object_get_vaddr(bf->o, string->paddr, string->vaddr) : UT64_MAX;
 
 	// If raw string dump mode, use printf to dump directly to stdout.
 	//  PrintfCallback temp = io->cb_printf;
@@ -85,7 +81,7 @@ static void print_string(RzBinFile *bf, RzBinString *string, int raw, PJ *pj) {
 	case RZ_MODE_RIZINCMD: {
 		char *f_name, *nstr;
 		f_name = strdup(string->string);
-		rz_name_filter(f_name, 512);
+		rz_name_filter(f_name, 512, true);
 		if (bin->prefix) {
 			nstr = rz_str_newf("%s.str.%s", bin->prefix, f_name);
 			io->cb_printf("f %s.str.%s %u @ 0x%08" PFMT64x "\n"
@@ -449,8 +445,6 @@ RZ_IPI RzBinFile *rz_bin_file_new(RzBin *bin, const char *file, ut64 file_sz, in
 		bf->xtr_data = rz_list_newf((RzListFree)rz_bin_xtrdata_free);
 		bf->xtr_obj = NULL;
 		bf->sdb = sdb_new0();
-		bf->sdb_addrinfo = sdb_new0(); //ns (bf->sdb, "addrinfo", 1);
-		// bf->sdb_addrinfo->refs++;
 	}
 	return bf;
 }
@@ -702,11 +696,6 @@ RZ_API void rz_bin_file_free(void /*RzBinFile*/ *_bf) {
 	rz_buf_free(bf->buf);
 	if (bf->curxtr && bf->curxtr->destroy && bf->xtr_obj) {
 		bf->curxtr->free_xtr((void *)(bf->xtr_obj));
-	}
-	// TODO: unset related sdb namespaces
-	if (bf->sdb_addrinfo) {
-		sdb_free(bf->sdb_addrinfo);
-		bf->sdb_addrinfo = NULL;
 	}
 	free(bf->file);
 	rz_bin_object_free(bf->o);
@@ -1026,17 +1015,6 @@ RZ_API RzBinField *rz_bin_file_add_field(RzBinFile *binfile, const char *classna
 	//TODO: add_field into class
 	//eprintf ("TODO add field: %s \n", name);
 	return NULL;
-}
-
-// XXX this api name makes no sense
-/* returns vaddr, rebased with the baseaddr of binfile, if va is enabled for
- * bin, paddr otherwise */
-RZ_API ut64 rz_bin_file_get_vaddr(RzBinFile *bf, ut64 paddr, ut64 vaddr) {
-	rz_return_val_if_fail(bf && bf->o, paddr);
-	if (bf->o->info && bf->o->info->has_va) {
-		return binobj_a2b(bf->o, vaddr);
-	}
-	return paddr;
 }
 
 RZ_API RzList *rz_bin_file_get_trycatch(RzBinFile *bf) {

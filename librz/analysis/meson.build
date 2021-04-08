@@ -29,14 +29,13 @@ rz_analysis_sources = [
   'rtti_itanium.c',
   'sign.c',
   'switch.c',
-  'type.c',
-  'type_pdb.c',
   'dwarf_process.c',
   'value.c',
   'var.c',
   'vtable.c',
   'xrefs.c',
   'serialize_analysis.c',
+  'type_pdb.c',
   'p/analysis_6502.c',
   'p/analysis_6502_cs.c',
   'p/analysis_8051.c',
@@ -57,6 +56,7 @@ rz_analysis_sources = [
   'p/analysis_i4004.c',
   'p/analysis_i8080.c',
   'p/analysis_java.c',
+  'p/analysis_luac.c',
   'p/analysis_m68k_cs.c',
   'p/analysis_m680x_cs.c',
   'p/analysis_malbolge.c',
@@ -88,7 +88,6 @@ rz_analysis_sources = [
   'p/analysis_v850.c',
   'p/analysis_vax.c',
   'p/analysis_wasm.c',
-  'p/analysis_ws.c',
   'p/analysis_x86_cs.c',
   'p/analysis_xap.c',
   'p/analysis_xcore_cs.c',
@@ -106,8 +105,7 @@ rz_analysis_sources = [
   '../asm/arch/h8300/h8300_disas.c',
   '../asm/arch/hexagon/hexagon.c',
   '../asm/arch/hexagon/hexagon_disas.c',
-  '../asm/arch/java/code.c',
-  '../asm/arch/java/ops.c',
+  '../asm/arch/java/jvm.c',
   '../asm/arch/mcore/mcore.c',
   '../asm/arch/msp430/msp430_disas.c',
   '../asm/arch/or1k/or1k_disas.c',
@@ -159,7 +157,10 @@ rz_analysis_sources = [
   '../asm/arch/pyc/opcode_analysis.c',
   '../asm/arch/pyc/opcode_arg_fmt.c',
   '../asm/arch/pyc/opcode.c',
-  '../asm/arch/pyc/pyc_dis.c'
+  '../asm/arch/pyc/pyc_dis.c',
+  '../asm/arch/luac/lua_arch.c',
+  '../asm/arch/luac/v54/analysis_54.c',
+  '../asm/arch/luac/v54/opcode_54.c',
 ]
 
 rz_analysis_inc = [
@@ -185,6 +186,7 @@ rz_analysis = library('rz_analysis', rz_analysis_sources,
     rz_parse_dep,
     rz_asm_dep,
     rz_bin_dep,
+    rz_type_dep,
     capstone_dep
   ],
   install: true,
@@ -212,7 +214,8 @@ pkgconfig_mod.generate(rz_analysis,
     'rz_search',
     'rz_cons',
     'rz_bin',
-    'rz_flag'
+    'rz_flag',
+    'rz_type'
   ],
   description: 'rizin foundation libraries'
 )

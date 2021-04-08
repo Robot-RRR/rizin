@@ -86,7 +86,6 @@ static RzBinInfo *info(RzBinFile *bf) {
 		bi->machine = strdup("ATmel");
 		bi->os = strdup("avr");
 		bi->has_va = 0; // 1;
-		bi->has_lit = false;
 		bi->arch = strdup("avr");
 		bi->bits = 8;
 	}
@@ -134,7 +133,7 @@ static RzList *symbols(RzBinFile *bf) {
 	RzList *ret = NULL;
 	RzBuffer *obj = bf->o->bin_obj;
 
-	if (!(ret = rz_list_newf(free))) {
+	if (!(ret = rz_list_newf((RzListFree)rz_bin_symbol_free))) {
 		return NULL;
 	}
 	/* atmega8 */

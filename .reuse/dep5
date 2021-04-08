@@ -132,8 +132,16 @@ Copyright: 2009 RadareOrg <pancake@nopcode.org>
 License: LGPL-3.0-only
 
 Files: librz/magic/d/default/*
-Copyright: 1986, 1987, 1989, 1990, 1991, 1992, 1994, 1995 Ian F. Darwin 
+Copyright: 1986, 1987, 1989, 1990, 1991, 1992, 1994, 1995 Ian F. Darwin
 License: BSD-2-Clause
+
+Files: librz/syscall/d/*
+Copyright: 2011 RadareOrg <pancake@nopcode.org>
+License: LGPL-3.0-only
+
+Files: librz/syscall/d2/*
+Copyright: 2018 RadareOrg <pancake@nopcode.org>
+License: LGPL-3.0-only
 
 Files: pkgcfg/*.pc.acr
 Copyright: 2009 RadareOrg <pancake@nopcode.org>
@@ -167,6 +175,10 @@ Files: librz/asm/arch/ppc/README
 Copyright: RadareOrg <pancake@nopcode.org>
 License: LGPL-3.0-only
 
+Files: librz/asm/arch/*/gnu/*
+Copyright: 1989-2021 Free Software Foundation, Inc.
+License: GPL-2.0-or-later
+
 Files: librz/bp/README
 Copyright: RadareOrg <pancake@nopcode.org>
 License: LGPL-3.0-only
@@ -174,6 +186,10 @@ License: LGPL-3.0-only
 Files: librz/egg/README
 Copyright: pancake <pancake@nopcode.org>
 License: LGPL-3.0-only
+
+Files: librz/include/sflib/*
+Copyright: 2004 Philippe Biondi <phil@secdev.org>
+License: GPL-2.0-only
 
 Files: librz/io/README
 Copyright: pancake <pancake@nopcode.org>
@@ -193,6 +209,30 @@ Copyright: 1992, 1993, 1994 Henry Spencer
 Copyright: 1992, 1993, 1994 The Regents of the University of California
 License: BSD-3-Clause
 
+Files: shlr/arm/omap3430_registers
+Copyright: Anton Kochkov <anton.kochkov@gmail.com>
+License: LGPL-3.0-only
+
+Files: shlr/heap/include/rz_jemalloc/*
+Copyright: 2002-present Jason Evans <jasone@canonware.com>
+Copyright: 2007-2012 Mozilla Foundation.
+Copyright: 2009-present Facebook, Inc.
+License: BSD-2-Clause
+
+Files: shlr/spp/*
+Copyright: 2009-2020 pancake <pancake@nopcode.org>
+License: MIT
+
 Files: shlr/tcc/*
 Copyright: 2001-2004 Fabrice Bellard
 License: LGPL-2.0-or-later
+
+Files: shlr/winkd/profiles.h
+Copyright: 2014-2017 The Lemon Man <thatlemon@gmail.com>
+Copyright: 2019-2020 GustavoLCR <gugulcr@gmail.com>
+License: LGPL-3.0-only
+
+Files: subprojects/mpc/*
+Copyright: 2013-present Daniel Holden <contact@theorangeduck.com>
+License: BSD-2-Clause
+

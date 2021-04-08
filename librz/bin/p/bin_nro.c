@@ -44,8 +44,8 @@ static bool load_buffer(RzBinFile *bf, void **bin_obj, RzBuffer *b, ut64 loadadd
 	RzBinNXOObj *bin = RZ_NEW0(RzBinNXOObj);
 	if (bin) {
 		ut64 ba = baddr(bf);
-		bin->methods_list = rz_list_newf((RzListFree)free);
-		bin->imports_list = rz_list_newf((RzListFree)free);
+		bin->methods_list = rz_list_newf((RzListFree)rz_bin_symbol_free);
+		bin->imports_list = rz_list_newf((RzListFree)rz_bin_import_free);
 		bin->classes_list = rz_list_newf((RzListFree)free);
 		ut32 mod0 = rz_buf_read_le32_at(b, NRO_OFFSET_MODMEMOFF);
 		parseMod(b, bin, mod0, ba);
@@ -54,7 +54,7 @@ static bool load_buffer(RzBinFile *bf, void **bin_obj, RzBuffer *b, ut64 loadadd
 	return true;
 }
 
-static RzBinAddr *binsym(RzBinFile *bf, int type) {
+static RzBinAddr *binsym(RzBinFile *bf, RzBinSpecialSymbol type) {
 	return NULL; // TODO
 }
 
@@ -243,7 +243,6 @@ static RzBinInfo *info(RzBinFile *bf) {
 	}
 	ret->bits = 64;
 	ret->has_va = true;
-	ret->has_lit = true;
 	ret->big_endian = false;
 	ret->dbg_info = 0;
 	ret->dbg_info = 0;

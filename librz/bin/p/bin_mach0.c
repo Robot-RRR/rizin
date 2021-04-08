@@ -202,7 +202,7 @@ static RzList *symbols(RzBinFile *bf) {
 	const struct symbol_t *syms = NULL;
 	RzBinSymbol *ptr = NULL;
 	RzBinObject *obj = bf ? bf->o : NULL;
-	RzList *ret = rz_list_newf(free);
+	RzList *ret = rz_list_newf((RzListFree)rz_bin_symbol_free);
 #if 0
 	const char *lang = "c"; // XXX deprecate this
 #endif
@@ -373,17 +373,19 @@ static RzBinImport *import_from_name(RzBin *rbin, const char *orig_name, HtPP *i
 static RzList *imports(RzBinFile *bf) {
 	RzBinObject *obj = bf ? bf->o : NULL;
 	struct MACH0_(obj_t) *bin = bf ? bf->o->bin_obj : NULL;
-	struct import_t *imports = NULL;
 	const char *name;
 	RzBinImport *ptr = NULL;
-	RzList *ret = NULL;
 	int i;
 
-	if (!obj || !bin || !obj->bin_obj || !(ret = rz_list_newf(free))) {
+	if (!obj || !bin || !obj->bin_obj) {
 		return NULL;
 	}
-	if (!(imports = MACH0_(get_imports)(bf->o->bin_obj))) {
-		return ret;
+	RzList *ret = rz_list_newf((RzListFree)rz_bin_import_free);
+	struct import_t *imports = MACH0_(get_imports)(bf->o->bin_obj);
+	if (!ret || !imports) {
+		rz_list_free(ret);
+		free(imports);
+		return NULL;
 	}
 	bin->has_canary = false;
 	bin->has_retguard = -1;
@@ -516,7 +518,6 @@ static RzBinInfo *info(RzBinFile *bf) {
 	ret->subsystem = strdup("darwin");
 	ret->arch = strdup(MACH0_(get_cputype)(bf->o->bin_obj));
 	ret->machine = MACH0_(get_cpusubtype)(bf->o->bin_obj);
-	ret->has_lit = true;
 	ret->type = MACH0_(get_filetype)(bf->o->bin_obj);
 	ret->big_endian = MACH0_(is_big_endian)(bf->o->bin_obj);
 	ret->bits = 32;
@@ -1111,11 +1112,11 @@ static RzBuffer *create(RzBin *bin, const ut8 *code, int clen, const ut8 *data, 
 	return buf;
 }
 
-static RzBinAddr *binsym(RzBinFile *bf, int sym) {
+static RzBinAddr *binsym(RzBinFile *bf, RzBinSpecialSymbol sym) {
 	ut64 addr;
 	RzBinAddr *ret = NULL;
 	switch (sym) {
-	case RZ_BIN_SYM_MAIN:
+	case RZ_BIN_SPECIAL_SYMBOL_MAIN:
 		addr = MACH0_(get_main)(bf->o->bin_obj);
 		if (addr == UT64_MAX || !(ret = RZ_NEW0(RzBinAddr))) {
 			return NULL;
@@ -1125,6 +1126,8 @@ static RzBinAddr *binsym(RzBinFile *bf, int sym) {
 		ret->vaddr = ((addr >> 1) << 1);
 		//}
 		ret->paddr = ret->vaddr;
+		break;
+	default:
 		break;
 	}
 	return ret;
@@ -1172,6 +1175,8 @@ RzBinPlugin rz_bin_plugin_mach0 = {
 	.create = &create,
 	.classes = &MACH0_(parse_classes),
 	.write = &rz_bin_write_mach0,
+	.section_type_to_string = &MACH0_(section_type_to_string),
+	.section_flag_to_rzlist = &MACH0_(section_flag_to_rzlist),
 };
 
 #ifndef RZ_PLUGIN_INCORE

@@ -39,7 +39,7 @@ static ut64 baddr(RzBinFile *bf) {
 	return 0;
 }
 
-static RzBinAddr *binsym(RzBinFile *bf, int sym) {
+static RzBinAddr *binsym(RzBinFile *bf, RzBinSpecialSymbol sym) {
 	return NULL;
 }
 
@@ -226,7 +226,6 @@ static RzList *symbols(RzBinFile *bf) {
 	if (!ret) {
 		return NULL;
 	}
-	ret->free = free;
 	if (obj->symbols) {
 		for (i = 0; i < obj->hdr.f_nsyms; i++) {
 			if (!(ptr = RZ_NEW0(RzBinSymbol))) {
@@ -294,7 +293,7 @@ static RzList *_relocs_list(RzBin *rbin, struct rz_bin_coff_obj *bin, bool patch
 	RzBinReloc *reloc;
 	struct coff_reloc *rel;
 	int j, i = 0;
-	RzList *list_rel = rz_list_new();
+	RzList *list_rel = rz_list_newf(free);
 	if (!list_rel) {
 		return NULL;
 	}
@@ -529,7 +528,6 @@ static RzBinInfo *info(RzBinFile *bf) {
 	ret->big_endian = obj->endian;
 	ret->has_va = true;
 	ret->dbg_info = 0;
-	ret->has_lit = true;
 
 	if (rz_coff_is_stripped(obj)) {
 		ret->dbg_info |= RZ_BIN_DBG_STRIPPED;

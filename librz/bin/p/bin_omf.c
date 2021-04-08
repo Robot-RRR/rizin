@@ -110,11 +110,9 @@ static RzList *symbols(RzBinFile *bf) {
 	if (!bf || !bf->o || !bf->o->bin_obj) {
 		return NULL;
 	}
-	if (!(ret = rz_list_new())) {
+	if (!(ret = rz_list_newf((RzListFree)rz_bin_symbol_free))) {
 		return NULL;
 	}
-
-	ret->free = free;
 
 	while (ct_sym < ((rz_bin_omf_obj *)bf->o->bin_obj)->nb_symbol) {
 		if (!(sym = RZ_NEW0(RzBinSymbol))) {
@@ -148,7 +146,6 @@ static RzBinInfo *info(RzBinFile *bf) {
 	ret->arch = strdup("x86");
 	ret->big_endian = false;
 	ret->has_va = true;
-	ret->has_lit = true;
 	ret->bits = rz_bin_omf_get_bits(bf->o->bin_obj);
 	ret->dbg_info = 0;
 	ret->has_nx = false;

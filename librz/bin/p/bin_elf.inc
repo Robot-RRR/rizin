@@ -41,11 +41,10 @@ static char *regstate(RzBinFile *bf) {
 		return NULL;
 	}
 
-	int len = 0;
-	ut8 *regs = Elf_(rz_bin_elf_grab_regstate)(obj, &len);
-	char *hexregs = (regs && len > 0) ? rz_hex_bin2strdup(regs, len) : NULL;
+	size_t sz = 0;
+	const ut8 *regs = Elf_(rz_bin_elf_grab_regstate)(obj, &sz);
+	char *hexregs = (regs && sz) ? rz_hex_bin2strdup(regs, sz) : NULL;
 
-	free(regs);
 	return hexregs;
 }
 
@@ -118,23 +117,25 @@ static ut64 boffset(RzBinFile *bf) {
 	return Elf_(rz_bin_elf_get_boffset)(bf->o->bin_obj);
 }
 
-static RzBinAddr *binsym(RzBinFile *bf, int sym) {
+static RzBinAddr *binsym(RzBinFile *bf, RzBinSpecialSymbol sym) {
 	struct Elf_(rz_bin_elf_obj_t) *obj = bf->o->bin_obj;
 	RzBinAddr *ret = NULL;
 	ut64 addr = 0LL;
 
 	switch (sym) {
-	case RZ_BIN_SYM_ENTRY:
+	case RZ_BIN_SPECIAL_SYMBOL_ENTRY:
 		addr = Elf_(rz_bin_elf_get_entry_offset)(bf->o->bin_obj);
 		break;
-	case RZ_BIN_SYM_MAIN:
+	case RZ_BIN_SPECIAL_SYMBOL_MAIN:
 		addr = Elf_(rz_bin_elf_get_main_offset)(bf->o->bin_obj);
 		break;
-	case RZ_BIN_SYM_INIT:
+	case RZ_BIN_SPECIAL_SYMBOL_INIT:
 		addr = Elf_(rz_bin_elf_get_init_offset)(bf->o->bin_obj);
 		break;
-	case RZ_BIN_SYM_FINI:
+	case RZ_BIN_SPECIAL_SYMBOL_FINI:
 		addr = Elf_(rz_bin_elf_get_fini_offset)(bf->o->bin_obj);
+		break;
+	default:
 		break;
 	}
 	if (addr && addr != UT64_MAX && (ret = RZ_NEW0(RzBinAddr))) {
@@ -206,6 +207,8 @@ static RzList *sections(RzBinFile *bf) {
 			ptr->vsize = section[i].size;
 			ptr->paddr = section[i].offset;
 			ptr->vaddr = section[i].rva;
+			ptr->type = section[i].type;
+			ptr->flags = section[i].flags;
 			ptr->add = !obj->phdr; // Load sections if there is no PHDR
 			ptr->perm = 0;
 			if (RZ_BIN_ELF_SCN_IS_EXECUTABLE(section[i].flags)) {
@@ -497,7 +500,7 @@ static RzList *symbols(RzBinFile *bf) {
 	rz_return_val_if_fail(bf && bf->o && bf->o->bin_obj, NULL);
 
 	struct Elf_(rz_bin_elf_obj_t) *bin = bf->o->bin_obj;
-	RzList *ret = rz_list_newf(free);
+	RzList *ret = rz_list_newf((RzListFree)rz_bin_symbol_free);
 	if (!ret) {
 		return NULL;
 	}
@@ -540,12 +543,12 @@ static RzList *symbols(RzBinFile *bf) {
 static RzList *imports(RzBinFile *bf) {
 	RzBinElfSymbol *import = NULL;
 	RzBinImport *ptr = NULL;
-	RzList *ret = NULL;
 	int i;
 
 	rz_return_val_if_fail(bf && bf->o, NULL);
 	struct Elf_(rz_bin_elf_obj_t) *elf = bf->o->bin_obj;
-	if (!(ret = rz_list_newf(rz_bin_import_free))) {
+	RzList *ret = rz_list_newf((RzListFree)rz_bin_import_free);
+	if (!ret) {
 		return NULL;
 	}
 	if (!(import = Elf_(rz_bin_elf_get_imports)(elf))) {
@@ -1039,7 +1042,6 @@ static void lookup_symbols(RzBinFile *bf, RzBinInfo *ret) {
 				ret->lang = "rust";
 			}
 		}
-		symbols_list->free = rz_bin_symbol_free;
 		rz_list_free(symbols_list);
 	}
 }
@@ -1109,7 +1111,6 @@ static RzBinInfo *info(RzBinFile *bf) {
 	}
 	ret->type = str;
 	ret->has_pi = (strstr(str, "DYN")) ? 1 : 0;
-	ret->has_lit = true;
 	ret->has_sanitizers = has_sanitizers(bf);
 	if (!(str = Elf_(rz_bin_elf_get_elf_class)(obj))) {
 		free(ret);
@@ -1174,7 +1175,7 @@ static RzBinInfo *info(RzBinFile *bf) {
 }
 
 static RzList *fields(RzBinFile *bf) {
-	RzList *ret = rz_list_newf((RzListFree)free);
+	RzList *ret = rz_list_newf((RzListFree)rz_bin_field_free);
 	if (!ret) {
 		return NULL;
 	}

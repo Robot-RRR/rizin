@@ -5,8 +5,6 @@
 #include <rz_bin.h>
 #include "minunit.h"
 
-#define MODE 2
-
 #define check_kv(k, v) \
 	do { \
 		value = sdb_get(sdb, k, NULL); \
@@ -28,13 +26,12 @@ static bool test_parse_dwarf_types(void) {
 	analysis->cpu = strdup("x86");
 	analysis->bits = 32;
 	mu_assert("pe/vista-glass.exe binary could not be opened", res);
-	mu_assert_notnull(analysis->sdb_types, "Couldn't create new RzAnalysis.sdb_types");
-	RzBinDwarfDebugAbbrev *abbrevs = rz_bin_dwarf_parse_abbrev(bin, MODE);
+	RzBinDwarfDebugAbbrev *abbrevs = rz_bin_dwarf_parse_abbrev(bin->cur);
 	mu_assert_notnull(abbrevs, "Couldn't parse Abbreviations");
-	RzBinDwarfDebugInfo *info = rz_bin_dwarf_parse_info(abbrevs, bin, MODE);
+	RzBinDwarfDebugInfo *info = rz_bin_dwarf_parse_info(bin->cur, abbrevs);
 	mu_assert_notnull(info, "Couldn't parse debug_info section");
 
-	HtUP /*<offset, List *<LocListEntry>*/ *loc_table = rz_bin_dwarf_parse_loc(bin, 4);
+	HtUP /*<offset, List *<LocListEntry>*/ *loc_table = rz_bin_dwarf_parse_loc(bin->cur, 4);
 	RzAnalysisDwarfContext ctx = {
 		.info = info,
 		.loc = loc_table
@@ -42,7 +39,7 @@ static bool test_parse_dwarf_types(void) {
 	rz_analysis_dwarf_process_info(analysis, &ctx);
 
 	char *value = NULL;
-	Sdb *sdb = analysis->sdb_types;
+	Sdb *sdb = analysis->typedb->sdb_types;
 	check_kv("_cairo_status", "enum");
 	check_kv("enum._cairo_status.0x0", "CAIRO_STATUS_SUCCESS");
 	check_kv("enum._cairo_status.CAIRO_STATUS_SUCCESS", "0x0");
@@ -63,7 +60,6 @@ static bool test_parse_dwarf_types(void) {
 				       "CAIRO_STATUS_FONT_TYPE_MISMATCH,CAIRO_STATUS_USER_FONT_IMMUTABLE,CAIRO_STATUS_USER_FONT_ERROR,"
 				       "CAIRO_STATUS_NEGATIVE_COUNT,CAIRO_STATUS_INVALID_CLUSTERS,"
 				       "CAIRO_STATUS_INVALID_SLANT,CAIRO_STATUS_INVALID_WEIGHT");
-
 	check_kv("_MARGINS", "struct");
 	// TODO evaluate member_location operations in DWARF to get offset and test it
 	check_kv("struct._MARGINS", "cxLeftWidth,cxRightWidth,cyTopHeight,cyBottomHeight");
@@ -72,8 +68,8 @@ static bool test_parse_dwarf_types(void) {
 	check_kv("union.unaligned", "ptr,u2,u4,u8,s2,s4,s8");
 	check_kv("union.unaligned.u2", "short unsigned int,0,0");
 	check_kv("union.unaligned.s8", "long long int,0,0");
-	rz_bin_dwarf_free_debug_info(info);
-	rz_bin_dwarf_free_debug_abbrev(abbrevs);
+	rz_bin_dwarf_debug_info_free(info);
+	rz_bin_dwarf_debug_abbrev_free(abbrevs);
 	rz_analysis_free(analysis);
 	rz_bin_free(bin);
 	rz_io_free(io);
@@ -96,12 +92,11 @@ static bool test_dwarf_function_parsing_cpp(void) {
 	analysis->cpu = strdup("x86");
 	analysis->bits = 64;
 	mu_assert("elf/dwarf4_many_comp_units.elf binary could not be opened", res);
-	mu_assert_notnull(analysis->sdb_types, "Couldn't create new RzAnalysis.sdb_types");
-	RzBinDwarfDebugAbbrev *abbrevs = rz_bin_dwarf_parse_abbrev(bin, MODE);
+	RzBinDwarfDebugAbbrev *abbrevs = rz_bin_dwarf_parse_abbrev(bin->cur);
 	mu_assert_notnull(abbrevs, "Couldn't parse Abbreviations");
-	RzBinDwarfDebugInfo *info = rz_bin_dwarf_parse_info(abbrevs, bin, MODE);
+	RzBinDwarfDebugInfo *info = rz_bin_dwarf_parse_info(bin->cur, abbrevs);
 	mu_assert_notnull(info, "Couldn't parse debug_info section");
-	HtUP /*<offset, List *<LocListEntry>*/ *loc_table = rz_bin_dwarf_parse_loc(bin, 8);
+	HtUP /*<offset, List *<LocListEntry>*/ *loc_table = rz_bin_dwarf_parse_loc(bin->cur, 8);
 
 	RzAnalysisDwarfContext ctx = {
 		.info = info,
@@ -127,9 +122,9 @@ static bool test_dwarf_function_parsing_cpp(void) {
 	check_kv("fcn.main.vars", "b,m,output");
 	check_kv("fcn.main.var.output", "b,-40,int");
 
-	rz_bin_dwarf_free_debug_info(info);
-	rz_bin_dwarf_free_debug_abbrev(abbrevs);
-	rz_bin_dwarf_free_loc(loc_table);
+	rz_bin_dwarf_debug_info_free(info);
+	rz_bin_dwarf_debug_abbrev_free(abbrevs);
+	rz_bin_dwarf_loc_free(loc_table);
 	rz_analysis_free(analysis);
 	rz_bin_free(bin);
 	rz_io_free(io);
@@ -152,12 +147,11 @@ static bool test_dwarf_function_parsing_go(void) {
 	analysis->cpu = strdup("x86");
 	analysis->bits = 64;
 	mu_assert("bins/elf/dwarf_go_tree", res);
-	mu_assert_notnull(analysis->sdb_types, "Couldn't create new RzAnalysis.sdb_types");
-	RzBinDwarfDebugAbbrev *abbrevs = rz_bin_dwarf_parse_abbrev(bin, MODE);
+	RzBinDwarfDebugAbbrev *abbrevs = rz_bin_dwarf_parse_abbrev(bin->cur);
 	mu_assert_notnull(abbrevs, "Couldn't parse Abbreviations");
-	RzBinDwarfDebugInfo *info = rz_bin_dwarf_parse_info(abbrevs, bin, MODE);
+	RzBinDwarfDebugInfo *info = rz_bin_dwarf_parse_info(bin->cur, abbrevs);
 	mu_assert_notnull(info, "Couldn't parse debug_info section");
-	HtUP /*<offset, List *<LocListEntry>*/ *loc_table = rz_bin_dwarf_parse_loc(bin, 8);
+	HtUP /*<offset, List *<LocListEntry>*/ *loc_table = rz_bin_dwarf_parse_loc(bin->cur, 8);
 
 	RzAnalysisDwarfContext ctx = {
 		.info = info,
@@ -181,9 +175,9 @@ static bool test_dwarf_function_parsing_go(void) {
 	/* We do not parse variable information from .debug_frame that is this Go binary using, so
 	   don't check variable information and add it in the future */
 
-	rz_bin_dwarf_free_debug_info(info);
-	rz_bin_dwarf_free_debug_abbrev(abbrevs);
-	rz_bin_dwarf_free_loc(loc_table);
+	rz_bin_dwarf_debug_info_free(info);
+	rz_bin_dwarf_debug_abbrev_free(abbrevs);
+	rz_bin_dwarf_loc_free(loc_table);
 	rz_analysis_free(analysis);
 	rz_bin_free(bin);
 	rz_io_free(io);
@@ -206,12 +200,11 @@ static bool test_dwarf_function_parsing_rust(void) {
 	analysis->cpu = strdup("x86");
 	analysis->bits = 64;
 	mu_assert("bins/elf/dwarf_rust_bubble", res);
-	mu_assert_notnull(analysis->sdb_types, "Couldn't create new RzAnalysis.sdb_types");
-	RzBinDwarfDebugAbbrev *abbrevs = rz_bin_dwarf_parse_abbrev(bin, MODE);
+	RzBinDwarfDebugAbbrev *abbrevs = rz_bin_dwarf_parse_abbrev(bin->cur);
 	mu_assert_notnull(abbrevs, "Couldn't parse Abbreviations");
-	RzBinDwarfDebugInfo *info = rz_bin_dwarf_parse_info(abbrevs, bin, MODE);
+	RzBinDwarfDebugInfo *info = rz_bin_dwarf_parse_info(bin->cur, abbrevs);
 	mu_assert_notnull(info, "Couldn't parse debug_info section");
-	HtUP /*<offset, List *<LocListEntry>*/ *loc_table = rz_bin_dwarf_parse_loc(bin, 8);
+	HtUP /*<offset, List *<LocListEntry>*/ *loc_table = rz_bin_dwarf_parse_loc(bin->cur, 8);
 
 	RzAnalysisDwarfContext ctx = {
 		.info = info,
@@ -238,9 +231,9 @@ static bool test_dwarf_function_parsing_rust(void) {
 	check_kv("fcn.bubble_sort_i32_.name", "bubble_sort<i32>");
 	check_kv("fcn.bubble_sort_i32_.addr", "0x5270");
 
-	rz_bin_dwarf_free_debug_info(info);
-	rz_bin_dwarf_free_debug_abbrev(abbrevs);
-	rz_bin_dwarf_free_loc(loc_table);
+	rz_bin_dwarf_debug_info_free(info);
+	rz_bin_dwarf_debug_abbrev_free(abbrevs);
+	rz_bin_dwarf_loc_free(loc_table);
 	rz_analysis_free(analysis);
 	rz_bin_free(bin);
 	rz_io_free(io);

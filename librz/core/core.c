@@ -282,7 +282,7 @@ static ut64 numget(RzCore *core, const char *k) {
 }
 
 static bool __isMapped(RzCore *core, ut64 addr, int perm) {
-	if (rz_config_get_i(core->config, "cfg.debug")) {
+	if (rz_config_get_b(core->config, "cfg.debug")) {
 		// RzList *maps = core->dbg->maps;
 		RzDebugMap *map = NULL;
 		RzListIter *iter = NULL;
@@ -305,7 +305,7 @@ static bool __isMapped(RzCore *core, ut64 addr, int perm) {
 }
 
 static bool __syncDebugMaps(RzCore *core) {
-	if (rz_config_get_i(core->config, "cfg.debug")) {
+	if (rz_config_get_b(core->config, "cfg.debug")) {
 		return rz_debug_map_sync(core->dbg);
 	}
 	return false;
@@ -344,21 +344,21 @@ RZ_API RzCore *rz_core_cast(void *p) {
 static ut64 getref(RzCore *core, int n, char t, int type) {
 	RzAnalysisFunction *fcn = rz_analysis_get_fcn_in(core->analysis, core->offset, 0);
 	RzListIter *iter;
-	RzAnalysisRef *r;
+	RzAnalysisXRef *r;
 	RzList *list;
 	int i = 0;
 	if (!fcn) {
 		return UT64_MAX;
 	}
 	if (t == 'r') {
-		list = rz_analysis_function_get_refs(fcn);
+		list = rz_analysis_function_get_xrefs_from(fcn);
 	} else {
-		list = rz_analysis_function_get_xrefs(fcn);
+		list = rz_analysis_function_get_xrefs_to(fcn);
 	}
 	rz_list_foreach (list, iter, r) {
 		if (r->type == type) {
 			if (i == n) {
-				ut64 addr = r->addr;
+				ut64 addr = t == 'r' ? r->to : r->from;
 				rz_list_free(list);
 				return addr;
 			}
@@ -595,7 +595,7 @@ static ut64 num_callback(RNum *userptr, const char *str, int *ok) {
 					break;
 				}
 				*ptr = 0;
-				if (rz_config_get_i(core->config, "cfg.debug")) {
+				if (rz_config_get_b(core->config, "cfg.debug")) {
 					if (rz_debug_reg_sync(core->dbg, RZ_REG_TYPE_GPR, false)) {
 						RzRegItem *r = rz_reg_get(core->dbg->reg, bptr, -1);
 						if (r) {
@@ -1148,35 +1148,6 @@ out:
 	free(input);
 }
 
-//TODO: make it recursive to handle nested struct
-static int autocomplete_pfele(RzCore *core, RzLineCompletion *completion, char *key, char *pfx, int idx, char *ptr) {
-	int i, ret = 0;
-	int len = strlen(ptr);
-	char *fmt = sdb_get(core->print->formats, key, NULL);
-	if (fmt) {
-		int nargs = rz_str_word_set0_stack(fmt);
-		if (nargs > 1) {
-			for (i = 1; i < nargs; i++) {
-				const char *arg = rz_str_word_get0(fmt, i);
-				char *p = strchr(arg, '(');
-				char *p2 = strchr(arg, ')');
-				// remove '(' and ')' from fmt
-				if (p && p2) {
-					arg = p + 1;
-					*p2 = '\0';
-				}
-				if (!len || !strncmp(ptr, arg, len)) {
-					char *s = rz_str_newf("pf%s.%s.%s", pfx, key, arg);
-					rz_line_completion_push(completion, s);
-					free(s);
-				}
-			}
-		}
-	}
-	free(fmt);
-	return ret;
-}
-
 #define ADDARG(x) \
 	if (!strncmp(buf->data + chr, x, strlen(buf->data + chr))) { \
 		rz_line_completion_push(completion, x); \
@@ -1666,33 +1637,6 @@ RZ_API void rz_core_autocomplete(RZ_NULLABLE RzCore *core, RzLineCompletion *com
 			ADDARG("gui.alt_background")
 			ADDARG("gui.border")
 		}
-	} else if (!strncmp(buf->data, "pf.", 3) || !strncmp(buf->data, "pf*.", 4) || !strncmp(buf->data, "pfd.", 4) || !strncmp(buf->data, "pfv.", 4) || !strncmp(buf->data, "pfj.", 4)) {
-		char pfx[2];
-		int chr = (buf->data[2] == '.') ? 3 : 4;
-		if (chr == 4) {
-			pfx[0] = buf->data[2];
-			pfx[1] = 0;
-		} else {
-			*pfx = 0;
-		}
-		SdbList *sls = sdb_foreach_list(core->print->formats, false);
-		SdbListIter *iter;
-		SdbKv *kv;
-		ls_foreach (sls, iter, kv) {
-			int len = strlen(buf->data + chr);
-			int minlen = RZ_MIN(len, strlen(sdbkv_key(kv)));
-			if (!len || !strncmp(buf->data + chr, sdbkv_key(kv), minlen)) {
-				char *p = strchr(buf->data + chr, '.');
-				if (p) {
-					autocomplete_pfele(core, completion, sdbkv_key(kv), pfx, 0, p + 1);
-					break;
-				} else {
-					char *s = rz_str_newf("pf%s.%s", pfx, sdbkv_key(kv));
-					rz_line_completion_push(completion, s);
-					free(s);
-				}
-			}
-		}
 	} else if ((!strncmp(buf->data, "afvn ", 5)) || (!strncmp(buf->data, "afan ", 5))) {
 		RzAnalysisFunction *fcn = rz_analysis_get_fcn_in(core->analysis, core->offset, 0);
 		RzList *vars;
@@ -1718,34 +1662,6 @@ RZ_API void rz_core_autocomplete(RZ_NULLABLE RzCore *core, RzLineCompletion *com
 			}
 		}
 		rz_list_free(vars);
-	} else if (!strncmp(buf->data, "t ", 2) || !strncmp(buf->data, "t- ", 3)) {
-		SdbList *l = sdb_foreach_list(core->analysis->sdb_types, true);
-		SdbListIter *iter;
-		SdbKv *kv;
-		int chr = (buf->data[1] == ' ') ? 2 : 3;
-		ls_foreach (l, iter, kv) {
-			int len = strlen(buf->data + chr);
-			if (!len || !strncmp(buf->data + chr, sdbkv_key(kv), len)) {
-				if (!strcmp(sdbkv_value(kv), "type") || !strcmp(sdbkv_value(kv), "enum") || !strcmp(sdbkv_value(kv), "struct")) {
-					rz_line_completion_push(completion, sdbkv_key(kv));
-				}
-			}
-		}
-		ls_free(l);
-	} else if ((!strncmp(buf->data, "te ", 3))) {
-		SdbList *l = sdb_foreach_list(core->analysis->sdb_types, true);
-		SdbListIter *iter;
-		SdbKv *kv;
-		int chr = 3;
-		ls_foreach (l, iter, kv) {
-			int len = strlen(buf->data + chr);
-			if (!len || !strncmp(buf->data + chr, sdbkv_key(kv), len)) {
-				if (!strcmp(sdbkv_value(kv), "enum")) {
-					rz_line_completion_push(completion, sdbkv_key(kv));
-				}
-			}
-		}
-		ls_free(l);
 	} else if (!strncmp(buf->data, "$", 1)) {
 		int i;
 		for (i = 0; i < core->rcmd->aliases.count; i++) {
@@ -1755,21 +1671,6 @@ RZ_API void rz_core_autocomplete(RZ_NULLABLE RzCore *core, RzLineCompletion *com
 				rz_line_completion_push(completion, key);
 			}
 		}
-	} else if (!strncmp(buf->data, "ts ", 3) || !strncmp(buf->data, "ta ", 3) || !strncmp(buf->data, "tp ", 3) || !strncmp(buf->data, "tl ", 3) || !strncmp(buf->data, "tpx ", 4) || !strncmp(buf->data, "tss ", 4) || !strncmp(buf->data, "ts* ", 4)) {
-		SdbList *l = sdb_foreach_list(core->analysis->sdb_types, true);
-		SdbListIter *iter;
-		SdbKv *kv;
-		int chr = (buf->data[2] == ' ') ? 3 : 4;
-		ls_foreach (l, iter, kv) {
-			int len = strlen(buf->data + chr);
-			const char *key = sdbkv_key(kv);
-			if (!len || !strncmp(buf->data + chr, key, len)) {
-				if (!strncmp(sdbkv_value(kv), "struct", strlen("struct") + 1)) {
-					rz_line_completion_push(completion, key);
-				}
-			}
-		}
-		ls_free(l);
 	} else if (!strncmp(buf->data, "zo ", 3) || !strncmp(buf->data, "zoz ", 4)) {
 		if (core->analysis->zign_path && core->analysis->zign_path[0]) {
 			char *zignpath = rz_file_abspath(core->analysis->zign_path);
@@ -1879,12 +1780,10 @@ static void update_sdb(RzCore *core) {
 	//sdb_ns_set (core->sdb, "bin", core->bin->sdb);
 	//SDB// syscall/
 	if (core->rasm && core->rasm->syscall && core->rasm->syscall->db) {
-		core->rasm->syscall->db->refs++;
 		sdb_ns_set(DB, "syscall", core->rasm->syscall->db);
 	}
 	d = sdb_ns(DB, "debug", 1);
 	if (core->dbg->sgnls) {
-		core->dbg->sgnls->refs++;
 		sdb_ns_set(d, "signals", core->dbg->sgnls);
 	}
 }
@@ -2322,8 +2221,9 @@ static void __init_autocomplete_default(RzCore *core) {
 	const char *files[] = {
 		".", "..", ".*", "/F", "/m", "!", "!!", "#!c", "#!v", "#!cpipe", "#!vala",
 		"#!rust", "#!zig", "#!pipe", "#!python", "aeli", "arp", "arpg", "dmd", "drp", "drpg", "o",
-		"idp", "idpi", "L", "obf", "o+", "oc", "rz", "rz_bin", "rz_asm", "rz_hash", "rz_ax",
-		"rz_find", "cd", "ls", "on", "op", "wf", "rm", "wF", "wp", "Sd", "Sl", "to", "pm",
+		"idp", "idpi", "L", "obf", "o+", "oc",
+		"rizin", "rz-agent", "rz-asm", "rz-ax", "rz-bin", "rz-diff", "rz-find", "rz-gg", "rz-hash", "rz-pm", "rz-run", "rz-sign",
+		"cd", "ls", "on", "op", "wf", "rm", "wF", "wp", "Sd", "Sl", "to", "pm",
 		"/m", "zos", "zfd", "zfs", "zfz", "cat", "wta", "wtf", "wxf", "dml", "vi",
 		"less", "head", "Ps", "Pl", NULL
 	};
@@ -2544,7 +2444,7 @@ RZ_API bool rz_core_init(RzCore *core) {
 	rz_lang_set_user_ptr(core->lang, core);
 	core->rasm = rz_asm_new();
 	core->rasm->num = core->num;
-	rz_asm_set_user_ptr(core->rasm, core);
+	core->rasm->core = core;
 	core->analysis = rz_analysis_new();
 	core->gadgets = rz_list_newf((RzListFree)rz_core_gadget_free);
 	core->analysis->ev = core->ev;
@@ -2553,9 +2453,8 @@ RZ_API bool rz_core_init(RzCore *core) {
 	core->analysis->cb.on_fcn_new = on_fcn_new;
 	core->analysis->cb.on_fcn_delete = on_fcn_delete;
 	core->analysis->cb.on_fcn_rename = on_fcn_rename;
-	core->print->sdb_types = core->analysis->sdb_types;
 	core->rasm->syscall = rz_syscall_ref(core->analysis->syscall); // BIND syscall analysis/asm
-	rz_analysis_set_user_ptr(core->analysis, core);
+	core->analysis->core = core;
 	core->analysis->cb_printf = (void *)rz_cons_printf;
 	core->parser = rz_parse_new();
 	rz_analysis_bind(core->analysis, &(core->parser->analb));
@@ -2590,6 +2489,7 @@ RZ_API bool rz_core_init(RzCore *core) {
 	rz_io_bind(core->io, &(core->search->iob));
 	rz_io_bind(core->io, &(core->print->iob));
 	rz_io_bind(core->io, &(core->analysis->iob));
+	rz_io_bind(core->io, &(core->analysis->typedb->iob));
 	rz_io_bind(core->io, &(core->bin->iob));
 	rz_flag_bind(core->flags, &(core->analysis->flb));
 	core->analysis->flg_class_set = core_flg_class_set;

@@ -12,6 +12,7 @@ rz_core_sources = [
   'cbin.c',
   'cconfig.c',
   'cdebug.c',
+  'cdwarf.c',
   'cio.c',
   'cmd.c',
   cmd_descs_c,
@@ -52,6 +53,7 @@ rz_core_sources = [
   'panels.c',
   'cplugin.c',
   'project.c',
+  'project_migrate.c',
   'rtr.c',
   #'rtr_http.c',
   #'rtr_shell.c',
@@ -96,13 +98,15 @@ rz_core_deps = [
   rz_egg_dep,
   rz_search_dep,
   rz_analysis_dep,
+  rz_type_dep,
   rz_debug_dep,
   rz_config_dep,
   rz_bin_dep,
   platform_deps,
   gdb_dep,
+  shell_parser_dep,
   lrt,
-  shell_parser_dep
+  mth
 ]
 
 if libuv_dep.found()
@@ -137,6 +141,7 @@ pkgconfig_mod.generate(
     'rz_cons',
     'rz_analysis',
     'rz_socket',
+    'rz_type',
     'rz_io',
     'rz_lang',
     'rz_hash',

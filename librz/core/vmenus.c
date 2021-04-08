@@ -60,11 +60,6 @@ static char *prompt(const char *str, const char *txt) {
 	return res;
 }
 
-static inline char *getformat(RzCoreVisualTypes *vt, const char *k) {
-	return sdb_get(vt->core->analysis->sdb_types,
-		sdb_fmt("type.%s", k), 0);
-}
-
 static char *colorize_asm_string(RzCore *core, const char *buf_asm, int optype, ut64 addr) {
 	char *tmp, *spacer = NULL;
 	char *source = (char *)buf_asm;
@@ -589,7 +584,7 @@ static bool sdbforcb(void *p, const char *k, const char *v) {
 		}
 	} else if (!strcmp(v, vt->type)) {
 		if (!strcmp(vt->type, "type")) {
-			char *fmt = getformat(vt, k);
+			const char *fmt = rz_type_db_get(vt->core->analysis->typedb, k);
 			if (vt->t_idx == vt->t_ctr) {
 				free(vt->curname);
 				vt->curname = strdup(k);
@@ -604,7 +599,6 @@ static bool sdbforcb(void *p, const char *k, const char *v) {
 				rz_cons_printf(" %s pf %3s   %s\n",
 					pre, fmt, k);
 			}
-			free(fmt);
 		} else {
 			if (vt->t_idx == vt->t_ctr) {
 				free(vt->curname);
@@ -676,7 +670,7 @@ RZ_API int rz_core_visual_types(RzCore *core) {
 			vt.t_ctr = 0;
 			vt.type = opts[h_opt];
 			vt.optword = optword;
-			sdb_foreach(core->analysis->sdb_types, sdbforcb, &vt);
+			sdb_foreach(core->analysis->typedb->sdb_types, sdbforcb, &vt);
 		}
 
 		rz_cons_visual_flush();
@@ -761,7 +755,7 @@ RZ_API int rz_core_visual_types(RzCore *core) {
 			}
 		} break;
 		case 'd':
-			rz_analysis_remove_parsed_type(core->analysis, vt.curname);
+			rz_type_db_remove_parsed_type(core->analysis->typedb, vt.curname);
 			break;
 		case '-':
 			rz_types_open_editor(core, NULL);
@@ -1707,7 +1701,7 @@ RZ_API int rz_core_visual_view_rop(RzCore *core) {
 			rz_cons_show_cursor(false);
 			break;
 		case 'y':
-			rz_core_cmdf(core, "yfx %s", chainstr);
+			rz_core_yank_hexpair(core, chainstr);
 			break;
 		case 'o': {
 			rz_line_set_prompt("offset: ");
@@ -2719,7 +2713,7 @@ static void rz_core_visual_analysis_refresh_column(RzCore *core, int colpos) {
 }
 
 static const char *help_fun_visual[] = {
-	"(a)", "analyze ", "(-)", "delete ", "(x)", "xrefs ", "(X)", "refs   j/k next/prev\n",
+	"(a)", "analyze ", "(-)", "delete ", "(x)", "xrefs to", "(X)", "xrefs from  j/k next/prev\n",
 	"(r)", "rename ", "(c)", "calls ", "(d)", "definetab column (_) hud\n",
 	"(d)", "define ", "(v)", "vars ", "(?)", " help ", "(:)", "shell ", "(q)", "quit\n",
 	"(s)", "edit function signature.  \n\n",
@@ -3144,10 +3138,10 @@ RZ_API void rz_core_visual_analysis(RzCore *core, const char *input) {
 			}
 			break;
 		case 'x':
-			rz_core_visual_refs(core, false, true);
+			rz_core_visual_xrefs(core, false, true);
 			break;
 		case 'X':
-			rz_core_visual_refs(core, true, true);
+			rz_core_visual_xrefs(core, true, true);
 			break;
 		case 's':
 			rz_core_analysis_function_signature_editor(core, addr);
@@ -3642,7 +3636,7 @@ onemoretime:
 					off + ntotal, n + ntotal,
 					(const char *)name + 4);
 			}
-			rz_name_filter(name, n + 10);
+			rz_name_filter(name, n + 10, true);
 			rz_flag_set(core->flags, name, off + ntotal, n);
 			free(name);
 			if (is_wide) {
@@ -3691,7 +3685,7 @@ onemoretime:
 			rz_meta_set(core->analysis, RZ_META_TYPE_STRING, off,
 				n, (const char *)name + 4);
 		}
-		rz_name_filter(name, n + 10);
+		rz_name_filter(name, n + 10, true);
 		rz_flag_set(core->flags, name, off, n);
 		wordsize = n;
 		free(name);

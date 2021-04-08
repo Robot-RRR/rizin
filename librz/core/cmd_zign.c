@@ -585,7 +585,7 @@ static void apply_name(RzCore *core, RzAnalysisFunction *fcn, RzSignItem *it, bo
 	rz_return_if_fail(core && fcn && it && it->name);
 	const char *name = it->realname ? it->realname : it->name;
 	if (rad) {
-		char *tmp = rz_name_filter2(name);
+		char *tmp = rz_name_filter2(name, true);
 		if (tmp) {
 			rz_cons_printf("\"afn %s @ 0x%08" PFMT64x "\"\n", tmp, fcn->addr);
 			free(tmp);
@@ -598,7 +598,7 @@ static void apply_name(RzCore *core, RzAnalysisFunction *fcn, RzSignItem *it, bo
 	}
 	rz_analysis_function_rename(fcn, name);
 	if (core->analysis->cb.on_fcn_rename) {
-		core->analysis->cb.on_fcn_rename(core->analysis, core->analysis->user, fcn, name);
+		core->analysis->cb.on_fcn_rename(core->analysis, core, fcn, name);
 	}
 }
 
@@ -627,7 +627,7 @@ static void apply_types(RzCore *core, RzAnalysisFunction *fcn, RzSignItem *it) {
 		}
 	}
 	rz_str_remove_char(alltypes, '"');
-	rz_analysis_save_parsed_type(core->analysis, alltypes);
+	rz_type_db_save_parsed_type(core->analysis->typedb, alltypes);
 	free(start);
 	free(alltypes);
 }
@@ -637,7 +637,7 @@ static void apply_flag(RzCore *core, RzSignItem *it, ut64 addr, int size, int co
 	char *name = rz_str_newf("%s.%s.%s_%d", zign_prefix, prefix, it->name, count);
 	if (name) {
 		if (rad) {
-			char *tmp = rz_name_filter2(name);
+			char *tmp = rz_name_filter2(name, true);
 			if (tmp) {
 				rz_cons_printf("f %s %d @ 0x%08" PFMT64x "\n", tmp, size, addr);
 				free(tmp);
@@ -1519,8 +1519,6 @@ static RzCmdStatus zi_handler_common(RzCore *core, int mode, const char *pfx) {
 }
 
 RZ_IPI RzCmdStatus rz_zign_info_handler(RzCore *core, int argc, const char **argv, RzOutputMode mode) {
-	char *pfx;
-	RzCmdStatus res = RZ_CMD_STATUS_OK;
 	switch (mode) {
 	case RZ_OUTPUT_MODE_STANDARD:
 		return zi_handler_common(core, '\0', "");
@@ -1529,10 +1527,7 @@ RZ_IPI RzCmdStatus rz_zign_info_handler(RzCore *core, int argc, const char **arg
 	case RZ_OUTPUT_MODE_QUIET:
 		return zi_handler_common(core, 'q', "");
 	case RZ_OUTPUT_MODE_RIZIN:
-		pfx = argc > 1 ? rz_str_newf(" %s", argv[1]) : rz_str_new("");
-		res = zi_handler_common(core, '\0', pfx);
-		free(pfx);
-		return res;
+		return zi_handler_common(core, '*', "");
 	default:
 		return RZ_CMD_STATUS_ERROR;
 	}
